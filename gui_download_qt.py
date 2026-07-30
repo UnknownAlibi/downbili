@@ -1117,6 +1117,8 @@ class DownloadWorker(QThread):
             "output_path": extract_output_path(output_detail),
             "status": status,
             "error": error,
+            "format_id": (self.settings.get("custom_format") or "").strip(),
+            "quality": self.settings.get("quality", ""),
             "created_at": started_at,
             "finished_at": int(time.time()),
         }
@@ -1167,6 +1169,7 @@ class DownloadWorker(QThread):
             "logger": QuietYtdlpLogger(),
             "http_headers": std_headers(),
             "progress_hooks": [lambda d: self.on_ytdlp_progress(index, d)],
+            "postprocessor_hooks": [self.on_ytdlp_postprocess],
         }
         custom_format = (self.settings.get("custom_format") or "").strip()
         if custom_format:
@@ -1232,6 +1235,17 @@ class DownloadWorker(QThread):
             self.item_progress.emit(index, 100, "下载完成，正在合并/整理")
         elif status == "error":
             self.item_progress.emit(index, 0, "下载错误")
+
+    def on_ytdlp_postprocess(self, d):
+        """后处理钩子：合并/转码完成后更新最终文件名。
+        DASH 流下载时 progress_hook 记录的是临时分片文件，合并后会被删除，
+        这里用 postprocessor 的 filepath 覆盖为最终输出文件，确保历史记录能取到真实路径。"""
+        try:
+            filepath = d.get("filepath") or ""
+            if filepath:
+                self.current_filename = filepath
+        except Exception:
+            pass
 
     def download_with_ytdlp(self, index, url):
         self.current_filename = ""
