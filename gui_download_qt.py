@@ -1147,10 +1147,10 @@ class DownloadWorker(QThread):
         return str(p.parent / p.stem)
 
     def should_use_bili_legacy(self, url):
-        """B站公开视频兜底接口仅作为 yt-dlp 被 412 拦截时的回退（见 should_try_bili_fallback）。
-        正常下载一律走 yt-dlp：既能尊重用户在预览表选定的具体格式（custom_format），
-        也能按 quality 清晰度偏好获取高清 DASH 流，避免兜底接口忽略格式选择导致下载结果与选择不符。"""
-        return False
+        """B站链接优先走公开视频兜底接口（能绕过 412 风控）。
+        yt-dlp 直接请求 B站 API 经常被 412 拦截，且 quiet 模式下错误被吞掉，
+        导致 download() 返回成功但实际没下载任何内容。"""
+        return is_bilibili_url(url)
 
     def should_try_bili_fallback(self, url, exc):
         if not is_bilibili_url(url):
@@ -1253,7 +1253,14 @@ class DownloadWorker(QThread):
             result = ydl.download([url])
         if result:
             raise RuntimeError(f"yt-dlp 返回错误码: {result}")
-        return self.current_filename or self.settings["download_dir"]
+        final = self.current_filename or ""
+        # 验证：如果最终文件不存在（可能是 yt-dlp 静默失败，如 412 风控），抛错而非返回目录
+        if not final or not Path(final).is_file():
+            raise RuntimeError(
+                "yt-dlp 未生成有效文件（可能被 B站 412 风控拦截或格式无效）。\n"
+                "建议：清除选定的格式（留空）后重试，或配置 Cookie 后重试。"
+            )
+        return final
 
     def request_session(self):
         """构建带 Cookie 和代理的下载 session。"""
@@ -1282,8 +1289,20 @@ class DownloadWorker(QThread):
         if quality == "audio":
             raise RuntimeError("B站公开视频兜底接口不支持仅音频。请配置 Cookie 后重试。")
         has_cookie = (self.settings.get("cookie_mode") or "none") != "none"
-        # 无 Cookie 时降低清晰度到 360P，提高成功率
-        if not has_cookie:
+        # 如果用户在预览表选了具体格式（如 30080 / 30080+30280），从中解析出视频清晰度 qn
+        # B站 DASH 流 format_id：视频 300xx，音频 302xx；qn = format_id - 30000
+        custom_format = (self.settings.get("custom_format") or "").strip()
+        qn_from_format = None
+        if custom_format:
+            for part in custom_format.split("+"):
+                part = part.strip()
+                if part.isdigit() and part.startswith("300"):
+                    qn_from_format = int(part) - 30000
+                    break
+        if qn_from_format:
+            qn = qn_from_format
+            self.log.emit(f"按选定格式解析清晰度 qn={qn}")
+        elif not has_cookie:
             qn = 16  # 360P
             self.log.emit("未配置 Cookie，兜底接口尝试 360P 低清晰度...")
         else:
