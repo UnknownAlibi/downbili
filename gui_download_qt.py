@@ -1029,7 +1029,7 @@ class DownloadWorker(QThread):
         self.log.emit(f"开始处理: {url}")
         started_at = int(time.time())
         try:
-            if self.should_use_bili_selected_format(url):
+            if self.should_use_bili_legacy(url):
                 outputs = self.download_bili_legacy(index, url)
                 output_detail = self.output_detail(outputs)
             else:
@@ -1144,8 +1144,11 @@ class DownloadWorker(QThread):
         p = Path(path)
         return str(p.parent / p.stem)
 
-    def should_use_bili_selected_format(self, url):
-        return is_bilibili_url(url) and bool(self.settings.get("custom_format"))
+    def should_use_bili_legacy(self, url):
+        """B站公开视频兜底接口仅作为 yt-dlp 被 412 拦截时的回退（见 should_try_bili_fallback）。
+        正常下载一律走 yt-dlp：既能尊重用户在预览表选定的具体格式（custom_format），
+        也能按 quality 清晰度偏好获取高清 DASH 流，避免兜底接口忽略格式选择导致下载结果与选择不符。"""
+        return False
 
     def should_try_bili_fallback(self, url, exc):
         if not is_bilibili_url(url):
