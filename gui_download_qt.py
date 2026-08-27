@@ -22,7 +22,7 @@ from urllib.parse import parse_qs, urlparse
 
 import requests
 import yt_dlp
-from PyQt5.QtCore import QEasingCurve, QPropertyAnimation, QThread, QTimer, Qt, QUrl, pyqtSignal
+from PyQt5.QtCore import QEasingCurve, QLockFile, QPropertyAnimation, QThread, QTimer, Qt, QUrl, pyqtSignal
 from PyQt5.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QKeySequence
 from PyQt5.QtMultimedia import QSoundEffect
 from PyQt5.QtWidgets import (
@@ -4226,11 +4226,25 @@ class MainWindow(QMainWindow):
 def main():
     install_excepthooks()
     DEFAULT_DOWNLOAD_DIR.mkdir(exist_ok=True)
+
+    # 单实例锁：防止重复打开多个窗口抢占资源（下载目录/设置/history 是进程共享的）
+    lock_path = BASE_DIR / "app.lock"
+    lock = QLockFile(str(lock_path))
+    lock.setStaleLockTime(0)
+    if not lock.tryLock(100):
+        QMessageBox.information(
+            None, "Bilibili 视频下载器",
+            "程序已在运行中。\n如果确实打不开窗口，请在系统托盘找到图标单击恢复。",
+        )
+        return
+
     app = QApplication(sys.argv)
     app.setApplicationName("Bilibili 视频下载器")
     window = MainWindow()
     window.show()
-    sys.exit(app.exec_())
+    code = app.exec_()
+    lock.unlock()
+    sys.exit(code)
 
 
 if __name__ == "__main__":

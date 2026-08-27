@@ -22,8 +22,8 @@ project_root = Path(SPECPATH).resolve()
 datas = []
 binaries = []
 
-# 内置只读资源
-for resource in ("icon.ico", "download.png", "folder.png"):
+# 内置只读资源（icon.png 必须包含：._app_icon_path 优先用 icon.png 作为侧边栏看板娘）
+for resource in ("icon.ico", "icon.png", "download.png", "folder.png"):
     res_path = project_root / resource
     if res_path.exists():
         datas.append((str(res_path), "."))
