@@ -29,6 +29,60 @@
 - 更高清、仅音频、会员内容、DASH 精确格式，需要 Cookie 并依赖 yt-dlp 正常解析。
 - 当前没有完整下载历史、任务重试、暂停继续、字幕/弹幕/封面下载等成熟功能。
 
+## 最近一轮修复（保持文档与实际一致）
+
+- 媒体信息解析：旧正则几乎匹配不到分辨率/帧率/编码，导致下载完成后队列与历史里这些字段为空；已改为按行解析（`parse_media_info_text`），并有单元测试覆盖。
+- B站下载策略：改为「无 Cookie → 公开接口兜底；有 Cookie 且 ffmpeg 可用 → 优先 yt-dlp，失败再回退兜底」，与本文档描述一致。只有 yt-dlp 路径支持 DASH 合并、封面、字幕、文件名模板。
+- 文件名模板：B站兜底路径此前写死 `标题.mp4`，现已按「文件名模板」设置渲染（`render_filename_template`），命名风格与 yt-dlp 路径统一。
+- 并发下载：`current_filename` 改为线程局部存储（`threading.local`），修复多任务并发时输出文件路径串号。
+- 取消清理：只删除本次任务登记过的临时文件，不再扫描整个下载目录，避免误删用户自己放进去的文件。
+- 封面加载：移到后台线程（`ThumbnailWorker`），不再在主线程做网络请求。
+- 历史列表：填充期间关闭排序（避免行序错位）；批量下载期间不再逐条重建历史表（O(n²) 卡顿）。
+- 其他修复：设置页「任务并发」重启后丢失；第二个实例启动时因 `QMessageBox` 早于 `QApplication` 而崩溃；看板娘气泡在进度回调中频繁跳动；粒子层隐藏后仍在后台重绘；手动解析可能触发两次。
+- 依赖与打包：`requirements.txt` 补上 `browser-cookie3`（此前浏览器 Cookie 模式必然静默失败）；打包 spec 补上 `sounds/` 资源。
+
+### 仍未处理的已知问题
+
+- 兜底路径下选中的 `custom_format` 只用于反推清晰度 qn，不保证精确匹配用户所选格式。
+- `custom_format` 全局持久化，切换链接后不会自动清空，可能带到不兼容的站点。
+- `custom_format` 为 `300xx+302xx` 时若 Cookie 失效，会先走 yt-dlp 失败再兜底，多一次请求耗时。
+- `runtime.log` / `crash.log` 无轮转，长期使用会持续增长。
+- 队列中被「从队列删除」的任务仍计入进度条分母。
+- 快捷键 `Space` / `Esc` 是全局绑定，焦点不在输入框时可能误触暂停/取消。
+
+## 结构重构（2026-09）
+
+原先把全部 4400 多行堆在 `gui_download_qt.py` 单文件里，已按职责拆分为 `bidown/` 包，
+**只做代码原样搬迁，不改业务逻辑**：
+
+```text
+gui_download_qt.py          启动入口（单实例锁 + 打开主窗口 + 兼容旧导入路径）
+bidown/config.py            路径、常量、默认设置、ffmpeg 探测
+bidown/utils.py             纯函数：输入拆分、文件名模板、路径与数值格式化
+bidown/urls.py              链接 / BV 号解析
+bidown/media.py             ffmpeg 媒体信息探测
+bidown/history.py           下载历史读写
+bidown/settings.py          settings.json 读写
+bidown/bilibili.py          B站 Web API：视频信息、播放地址、Cookie 会话、弹幕
+bidown/net.py               HTTP 头、yt-dlp 静默 logger、Cookie/代理注入
+bidown/errors.py            错误文案与 B站错误分类
+bidown/logs.py              崩溃日志 / 运行日志
+bidown/shell.py             用系统默认程序打开文件、目录
+bidown/mascot.py            看板娘绘制
+bidown/workers/             preview / download / cookie / qrlogin / thumbnail 线程
+bidown/ui/                  main_window、qrlogin_dialog、effects（粒子、发光、音效、拖拽输入）
+```
+
+约定：
+
+- 入口文件名不变，`启动下载器.bat`、`downloader.spec`、`py gui_download_qt.py` 都照旧可用。
+- `gui_download_qt.py` 继续 re-export 纯函数，旧的 `from gui_download_qt import extract_bvid` 写法不会失效。
+- 跨模块不再直接导入 `FFMPEG_EXE` 全局变量，改用 `ffmpeg_path()` / `has_ffmpeg()`，避免拿到过期值。
+- 测试：`test_utils.py`（纯函数）+ `test_smoke.py`（离屏构建主窗口与各 Worker）。
+
+搬迁时的校验方式（可复用）：用 AST 提取重构前后每个顶层函数/类的源码，归一化后逐一比对，
+确保「丢失 0 个、内容不一致 0 个」；再配合 `py -m compileall`、`pytest`、离屏冒烟测试。
+
 ## 保留文件
 
 项目根目录当前应保留：
@@ -38,13 +92,19 @@
 - `DEVELOPMENT_PLAN.md`
 - `requirements.txt`
 - `gui_download_qt.py`
+- `bidown/`
+- `test_utils.py`
+- `test_smoke.py`
 - `启动下载器.bat`
 - `ffmpeg.exe`
 - `icon.ico`
+- `icon.png`
 - `download.png`
 - `folder.png`
+- `sounds/`
 - `download/`
 - `settings.json` 可存在，但应继续被 `.gitignore` 忽略
+- `_backup/gui_download_qt_single_file.py` 为重构前的单文件备份，确认重构无问题后可删除
 
 不要重新引入旧模块：
 

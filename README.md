@@ -22,6 +22,40 @@ py gui_download_qt.py
 - B 站无 Cookie 遇到 412 时，会自动尝试普通公开视频兜底下载
 - 下载完成后会显示本地文件大小、时长、分辨率、帧率和音视频编码
 
+## 项目结构
+
+```text
+gui_download_qt.py      启动入口（只负责单实例锁 + 打开主窗口）
+bidown/
+  config.py             路径、常量、默认设置
+  utils.py              纯函数工具（输入拆分、文件名模板、数值格式化）
+  urls.py               链接 / BV 号解析
+  media.py              ffmpeg 媒体信息探测
+  history.py            下载历史读写
+  settings.py           settings.json 读写
+  bilibili.py           B站 Web API（视频信息、播放地址、Cookie 会话、弹幕）
+  net.py                HTTP 头、yt-dlp 选项、Cookie/代理注入
+  errors.py             错误文案与 B站错误分类
+  logs.py               崩溃日志 / 运行日志
+  shell.py              用系统默认程序打开文件、目录
+  mascot.py             看板娘绘制
+  workers/              预览、下载、Cookie 检测、扫码登录、封面加载线程
+  ui/                   主窗口、扫码对话框、特效控件（粒子/发光/音效/拖拽输入）
+sounds/                 音效
+download/               下载产物与历史（已 gitignore）
+```
+
+入口文件名、`启动下载器.bat`、打包 spec 和测试导入路径都保持不变。
+
+## 测试
+
+```powershell
+py -m pytest -q
+```
+
+`test_utils.py` 覆盖纯函数（链接解析、文件名模板、媒体信息解析等），
+`test_smoke.py` 在离屏模式下构建主窗口与各 Worker，作为重构后的回归保障。
+
 ## 依赖
 
 ```powershell

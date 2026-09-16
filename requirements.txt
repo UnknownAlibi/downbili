@@ -2,3 +2,5 @@ PyQt5>=5.15
 requests[socks]>=2.31
 yt-dlp>=2025.8.22
 qrcode>=7.4
+browser-cookie3>=0.19
+pytest>=8.0

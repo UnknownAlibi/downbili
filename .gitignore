@@ -179,3 +179,19 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# 本项目运行时产物
+app.lock
+crash.log
+crash.log.1
+mascot.png
+*.log.*
+
+# 重构前的单文件备份（本地安全网，确认无误后可删）
+_backup/
+
+# 打包产物
+Bilibili视频下载器_安装包.zip
+bilibili_history.csv
+bilibili_history.json
+bilibili_settings.json

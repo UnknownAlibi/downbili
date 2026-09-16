@@ -33,6 +33,11 @@ ffmpeg_path = project_root / "ffmpeg.exe"
 if ffmpeg_path.exists():
     binaries.append((str(ffmpeg_path), "."))
 
+# 音效资源（缺失时程序会在只读临时目录里生成，打包进去更干净）
+sounds_dir = project_root / "sounds"
+if sounds_dir.is_dir():
+    datas.append((str(sounds_dir), "sounds"))
+
 a = Analysis(
     ["gui_download_qt.py"],
     pathex=[str(project_root)],
@@ -43,6 +48,8 @@ a = Analysis(
         "yt_dlp.extractor",
         "yt_dlp.postprocessor",
         "browser_cookie3",
+        "browser_cookie3.chrome",
+        "browser_cookie3.firefox",
         "qrcode",
     ],
     hookspath=[],

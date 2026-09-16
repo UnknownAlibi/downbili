@@ -19,10 +19,13 @@ from gui_download_qt import (
     format_error,
     is_bilibili_url,
     normalize_input,
+    parse_media_info_text,
+    render_filename_template,
     sanitize_filename,
     selected_page_number,
     split_inputs,
 )
+from bidown.media import has_no_audio
 
 
 # ---------- split_inputs ----------
@@ -234,3 +237,108 @@ class TestFormatError:
     def test_empty_message(self):
         exc = ValueError()
         assert format_error(exc) == "ValueError"
+
+
+# ---------- render_filename_template ----------
+
+class TestRenderFilenameTemplate:
+    def test_default_template(self):
+        name = render_filename_template(
+            "%(title).180B [%(id)s].%(ext)s",
+            {"title": "标题", "id": "BV1xx", "ext": "mp4"},
+        )
+        assert name == "标题 [BV1xx].mp4"
+
+    def test_truncate(self):
+        name = render_filename_template(
+            "%(title).5s.%(ext)s", {"title": "abcdefgh", "ext": "mp4"}
+        )
+        assert name == "abcde.mp4"
+
+    def test_unknown_field_becomes_empty(self):
+        name = render_filename_template(
+            "%(title)s-%(unknown)s.%(ext)s", {"title": "a", "ext": "mp4"}
+        )
+        assert name == "a-.mp4"
+
+    def test_empty_template_fallback(self):
+        assert render_filename_template("", {"title": "a", "ext": "mp4"}) == "a.mp4"
+        assert render_filename_template(None, {"title": "a", "ext": "mp4"}) == "a.mp4"
+
+    def test_illegal_chars_sanitized(self):
+        name = render_filename_template(
+            "%(title)s.%(ext)s", {"title": "a/b:c*d", "ext": "mp4"}
+        )
+        assert name == "a_b_c_d.mp4"
+
+    def test_missing_title_falls_back_to_video(self):
+        assert render_filename_template("%(title)s", {}) == "video"
+
+
+# ---------- parse_media_info_text ----------
+
+FFMPEG_MP4_OUTPUT = """Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'x.mp4':
+  Metadata:
+    major_brand     : isom
+  Duration: 00:03:12.34, start: 0.000000, bitrate: 2936 kb/s
+  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive), 1920x1080 [SAR 1:1 DAR 16:9], 2911 kb/s, 30 fps, 30 tbr, 15360 tbn (default)
+  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 44100 Hz, stereo, fltp, 128 kb/s (default)
+"""
+
+
+class TestParseMediaInfoText:
+    def test_real_ffmpeg_output(self):
+        info = parse_media_info_text(FFMPEG_MP4_OUTPUT)
+        assert info["duration"] == "00:03:12.34"
+        assert info["video_codec"] == "h264"
+        assert info["width"] == 1920
+        assert info["height"] == 1080
+        assert info["fps"] == 30
+        assert info["audio_codec"] == "aac"
+        assert info["audio_sample_rate"] == 44100
+
+    def test_hex_codec_tag_not_treated_as_resolution(self):
+        info = parse_media_info_text(FFMPEG_MP4_OUTPUT)
+        assert info["width"] == 1920 and info["height"] == 1080
+
+    def test_hevc_stream(self):
+        text = (
+            "  Duration: 00:00:10.00, start: 0.000000, bitrate: 1000 kb/s\n"
+            "  Stream #0:0: Video: hevc (Main), yuv420p(tv), 3840x2160 [SAR 1:1 DAR 16:9], "
+            "2000 kb/s, 59.94 fps, 60 tbr, 15360 tbn\n"
+        )
+        info = parse_media_info_text(text)
+        assert info["video_codec"] == "hevc"
+        assert info["width"] == 3840
+        assert info["height"] == 2160
+        assert info["fps"] == 59.94
+
+    def test_audio_only(self):
+        text = (
+            "  Duration: 00:02:00.00, start: 0.000000, bitrate: 128 kb/s\n"
+            "  Stream #0:0: Audio: mp3, 48000 Hz, stereo, fltp, 128 kb/s\n"
+        )
+        info = parse_media_info_text(text)
+        assert info["audio_codec"] == "mp3"
+        assert info["audio_sample_rate"] == 48000
+        assert "width" not in info
+
+    def test_empty(self):
+        assert parse_media_info_text("") == {}
+        assert parse_media_info_text(None) == {}
+
+
+# ---------- has_no_audio ----------
+
+class TestHasNoAudio:
+    def test_video_without_audio(self):
+        assert has_no_audio({"video_codec": "h264", "audio_codec": ""})
+
+    def test_normal_file(self):
+        assert not has_no_audio({"video_codec": "h264", "audio_codec": "aac"})
+
+    def test_audio_only(self):
+        assert not has_no_audio({"video_codec": "", "audio_codec": "aac"})
+
+    def test_empty_info(self):
+        assert not has_no_audio({})
