@@ -304,8 +304,12 @@ py gui_download_qt.py
 > 3. 执行打包：`py -m PyInstaller downloader.spec`
 > 4. 产物位于 `dist/Bilibili视频下载器/`，双击 `Bilibili视频下载器.exe` 运行。
 > 5. 用户文件（`settings.json`、`download/`、`download/history.json`、`cookies.txt`）写入 exe 同级目录，不会进入临时解压目录。
-> 6. 如需替换 `ffmpeg.exe`，直接覆盖 `dist/Bilibili视频下载器/ffmpeg.exe` 即可（程序优先读取 exe 同级 ffmpeg.exe）。
+> 6. 如需替换 `ffmpeg.exe`：PyInstaller 6 起 onedir 的资源放在 `_internal/`，
+>    即 `dist/Bilibili视频下载器/_internal/ffmpeg.exe`；程序会优先读取 exe 同级目录的
+>    `ffmpeg.exe`，所以也可以直接把新 ffmpeg 放到 `dist/Bilibili视频下载器/` 下覆盖优先使用。
 > 7. 打包模式为 onedir（非 onefile），启动更快且便于替换资源。
+> 8. 发行压缩包：`dist/Bilibili视频下载器/` 整目录打包（含 `_internal`），用户解压后直接双击 exe。
+>    首次运行会在 exe 同级生成 `settings.json`、`download/`、`app.lock`。
 
 验收：
 

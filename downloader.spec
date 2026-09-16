@@ -10,7 +10,10 @@
 说明：
 - onedir 模式：启动更快，ffmpeg.exe 可在 dist 目录下替换。
 - 用户文件（settings.json、download/、history.json）写入 exe 同级目录。
-- 内置资源（icon.ico、download.png、folder.png、ffmpeg.exe）打包进应用目录。
+- 内置资源（icon.ico、icon.png、download.png、folder.png、sounds/、ffmpeg.exe）打包进应用目录。
+- PyInstaller 6 起 onedir 的依赖与资源放在 `_internal/` 子目录下，
+  因此替换 ffmpeg 是 `dist/Bilibili视频下载器/_internal/ffmpeg.exe`；
+  程序也会优先读 exe 同级目录的 ffmpeg.exe，想覆盖就直接放在 exe 旁边。
 """
 
 import sys
